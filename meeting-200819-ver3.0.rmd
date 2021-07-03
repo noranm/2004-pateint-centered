@@ -1,0 +1,1149 @@
+---
+title: "patient-centered"
+author: "숙명여대 최영근, 노혜림"
+date: '2020 8 8 '
+output: 
+  html_document:
+    fig_height: 4
+    fig_width: 6
+    highlight: textmate
+    theme: cosmo
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+---
+
+```{r, echo=FALSE, message=FALSE}
+library(data.table)
+library(readxl)
+library(ggplot2)
+library(dplyr)
+```
+
+```{r, echo=FALSE, message=FALSE}
+################################################################################
+############################### load data ######################################
+################################################################################
+# 2017 (1차) raw data
+#data17 <- read.csv("./data/2017_STEP_1+8.csv", fileEncoding = "euc-kr")
+# 2019 (2차) raw data
+#data19 <- read.csv("./data/2019_STEP_1+8.csv", fileEncoding = "euc-kr")
+
+data17 <- read.csv("./2017-step1_2_3_8.csv", fileEncoding = "euc-kr")
+data19 <- read.csv("./2019-step1_2_3_8.csv", fileEncoding = "euc-kr")
+
+################################################################################
+############################### load data ######################################
+################################################################################
+# 환자 변수
+# def AGE
+data17$AGE <-2020 - as.numeric(substr(data17$PAT_BTH_YM,1,4))
+
+agebreaks <- c(20,40,60,500)
+agelabels <- c("20-39", "40-59", "60+")
+setDT(data17)[, AGE := cut(AGE,
+                           breaks = agebreaks,
+                           right = FALSE, 
+                           labels = agelabels)]
+
+data17$AGE <- factor(data17$AGE, ordered = TRUE)
+
+data19$AGE <-2020 - as.numeric(substr(data19$PAT_BTH_YM,1,4))
+
+agebreaks <- c(20,40,60,500)
+agelabels <- c("20-39", "40-59", "60+")
+setDT(data19)[, AGE := cut(AGE,
+                           breaks = agebreaks,
+                           right = FALSE, 
+                           labels = agelabels)]
+
+data19$AGE <- factor(data19$AGE, ordered = TRUE)
+
+data17$RECU_CL_CD <- factor(data17$RECU_CL_CD)
+data17$SEX_TP_CD <- factor(data17$SEX_TP_CD)
+data17$IFLD_SRGR_TP_CD <- factor(data17$IFLD_SRGR_TP_CD)
+data17$TEL_NUM_YN <- factor(data17$TEL_NUM_YN)
+
+data19$RECU_CL_CD <- factor(data19$RECU_CL_CD)
+data19$SEX_TP_CD <- factor(data19$SEX_TP_CD)
+data19$IFLD_SRGR_TP_CD <- factor(data19$IFLD_SRGR_TP_CD)
+data19$TEL_NUM_YN <- factor(data19$TEL_NUM_YN)
+
+Q_num <- c("Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8", "Q9", "Q10",
+           "Q11", "Q12", "Q13", "Q14", "Q15", "Q16", "Q17", "Q18", "Q19", "Q20", 
+           "Q21", "Q22", "Q23", "Q24")
+
+# 중복된 열 존재하므로 없앰
+u.data19 <- unique(data.frame(data19))
+u.data17 <- unique(data.frame(data17))
+
+data17.s2 <- u.data17[u.data17$STEP_2 == "Y",]
+data19.s2 <- u.data19[u.data19$STEP_2 == "Y",]
+
+data17.s3 <- data17.s2[data17.s2$TEL_NUM_YN=="Y",]
+data17.s8 <- data17.s3[!is.na(data17.s3$Q1),]
+
+data19.s3 <- data19.s2[data19.s2$TEL_NUM_YN=="Y",]
+data19.s8 <- data19.s3[!is.na(data19.s3$Q1),]
+```
+
+```{r, echo=FALSE, message=FALSE}
+# 2017 (1차) 연구용 코딩북_평과결과
+result17 = data.frame(read_excel('./results.xlsx', sheet=6, range = "B5:J96", col_names=FALSE))
+colnames(result17) <- c("YKIHO_C", "RECU_CL_CD_17", "FinalSample_17", "part1_17", "part2_17", "part3_17", "part4_17", "part5_17", "overall_17")
+# 2019 (2차) 연구용 코딩북_평과결과
+result19 = data.frame(read_excel('./results.xlsx', sheet=7, range = "B5:J153", col_names=FALSE))
+colnames(result19) <- c("YKIHO_C", "RECU_CL_CD_19", "FinalSample_19", "part1_19", "part2_19", "part3_19", "part4_19", "part5_19", "overall_19")
+
+# 연구용 코딩북_평가결과 1차 표본추출틀
+sample_tool17 = data.frame(read_excel('./results.xlsx', sheet=4, range = "B2:F97", col_names=TRUE))
+# 연구용 코딩북_평가결과 2차 표본추출틀
+sample_tool19 = data.frame(read_excel('./results.xlsx', sheet=5, range = "B2:F156", col_names=TRUE))
+
+colnames(sample_tool17) <- c("YKIHO_C", "RECU_CL_CD_17", "HOS_LOCAL_17", "BED_17", "TargetSample_17")
+colnames(sample_tool19) <- c("YKIHO_C", "RECU_CL_CD_19", "HOS_LOCAL_19", "BED_19", "TargetSample_19")
+
+# 간호등급
+# 17년도 간호등급은 같은 병원이어도 등급이 다르게 기록된 경우가 존재하여 사용하지 않음
+# nurse19 <- unique(data19.s2[,c("YKIHO_C", "NURSE_G.3.", "NURSE_G.4.")])
+# colnames(nurse19) <- c("YKIHO_C", "NURSE3.19", "NURSE4.19")
+
+# 요양기관 별 방문자 수 N
+# = 평가 기간 동안 한 병원에 기록된 명세서 수로 계산
+visit17 <- data17 %>% group_by(YKIHO_C) %>% summarise("VISIT_17" = n())
+visit19 <- data19 %>% group_by(YKIHO_C) %>% summarise("VISIT_19" = n())
+
+surgery17 <- data17[data17$SOPR_TP_CD=='9',] %>% group_by(YKIHO_C) %>% summarise("surgery_17" = n())
+surgery19 <- data19[data19$SOPR_TP_CD=='9',] %>% group_by(YKIHO_C) %>% summarise("surgery_19" = n())
+
+# 17, 19 자료 합치기 - sampling tool 의 전체가 아닌 result에 평가 결과가 존재하는 병원만(all.x=TRUE) 가져옴
+hospital_info17 <- merge(result17, sample_tool17[,c("YKIHO_C", "HOS_LOCAL_17", "BED_17", "TargetSample_17")], all.x = TRUE ,by = 'YKIHO_C')
+hospital_info17 <- merge(hospital_info17, visit17, all.x = TRUE , by="YKIHO_C")
+hospital_info17 <- merge(hospital_info17, surgery17, all.x = TRUE , by="YKIHO_C")
+
+ hospital_info19 <- merge(result19, sample_tool19[,c("YKIHO_C", "HOS_LOCAL_19", "BED_19", "TargetSample_19")], all.x = TRUE ,by = 'YKIHO_C')
+#hospital_info19 <- merge(hospital_info19, nurse19, all.x = TRUE ,by = 'YKIHO_C')
+hospital_info19 <- merge(hospital_info19, visit19, all.x = TRUE , by="YKIHO_C")
+hospital_info19 <- merge(hospital_info19, surgery19, all.x = TRUE , by="YKIHO_C")
+
+```
+
+# 1. 표본 크기의 적정성
+
+## 1.1) 기존 평가대상 의료기관
+```{r, echo=FALSE, message=FALSE}
+fillPalette1 <- c("#56B4E9", "#009E73", "#E69F00")
+fillPalette2 <- c("#0072B2", "#56B4E9", "#009E73", "#E69F00")
+
+# 17
+Q20_17 <- data17 %>% select(YKIHO_C, HPIN_F, Q20)
+Q20_17[Q20_17$Q20 >= 98,] <- NA
+
+# 병원별 분산 계산 Q20 문항만 사용
+stat17 <- Q20_17 %>% group_by(YKIHO_C) %>% 
+  summarise(sample_MEAN = mean(Q20*10, na.rm=TRUE),
+            sample_SD = sd(Q20*10, na.rm=TRUE),
+            # sample_N = n(),
+            sample_N = n_distinct(HPIN_F))
+
+stat17 <- merge(stat17, hospital_info17[,c("YKIHO_C", "FinalSample_17", "HOS_LOCAL_17", "TargetSample_17", "BED_17")], 
+                all.y = TRUE, by = "YKIHO_C")
+
+N <- stat17$sample_N ; n <- stat17$TargetSample_17 ; sd <- stat17$sample_SD
+stat17$hat_var <- sd * sqrt((N-n)/(N*n))
+stat17$B <- 1.96 * stat17$hat_var
+
+stat17$SAMPLE_INFO <- factor(stat17$TargetSample_17, levels=c(150, 200, 250),
+                                 labels=c("150명(500-1000병상)", 
+                                          "200명(1000-1500병상)", "250명(1500병상+)"))
+
+ggplot(stat17, aes(x=sample_N, y=B, color=SAMPLE_INFO),xlim=c(0, 60000), ylim=c(0,5)) + geom_point(aes(color=SAMPLE_INFO))  + geom_smooth(method="lm")  + 
+      scale_x_continuous(limits=c(-1,60000)) + scale_y_continuous(limits=c(-0,5)) +
+ggtitle("17년(1차)") + xlab("기간 내 입원 환자") + ylab("오차한계")+ theme(legend.position = "bottom", legend.title = element_blank())+ scale_color_manual(values=fillPalette1)
+
+# 19
+Q20_19 <- data19 %>% select(YKIHO_C,HPIN_F, Q20)
+Q20_19[Q20_19$Q20 >= 98,] <- NA
+
+# 병원별 분산 계산 Q20 문항만 사용
+stat19 <- Q20_19 %>% group_by(YKIHO_C) %>% 
+  summarise(sample_MEAN = mean(Q20*10, na.rm=TRUE),
+            sample_SD = sd(Q20*10, na.rm=TRUE),
+            #sample_N = n(),
+            sample_N = n_distinct(HPIN_F))
+
+stat19 <- merge(stat19, 
+                hospital_info19[,c("YKIHO_C", "FinalSample_19", "HOS_LOCAL_19", "TargetSample_19", "BED_19")],
+                all.y = TRUE, by = "YKIHO_C")
+
+N <- stat19$sample_N ; n <- stat19$TargetSample_19 ; sd <- stat19$sample_SD
+stat19$hat_var <- sd * sqrt((N-n)/(N*n))
+stat19$B <- 1.96 * stat19$hat_var
+
+BED500 <- as.numeric(stat19$BED_19 > 500)
+SIZE <- stat19$TargetSample_19
+
+# 62, 72, 11, 4
+stat19$SAMPLE_INFO <- 0 #"150명&500병상+"
+stat19[SIZE == "150" & !(BED500),]$SAMPLE_INFO <- 1 
+# "150명&300-500병상"
+stat19[SIZE==200,]$SAMPLE_INFO <- 2 # "200명&500병상+"
+stat19[SIZE==250,]$SAMPLE_INFO <- 3 # "250명&500병상+"
+table(stat19$SAMPLE_INFO)
+stat19$SAMPLE_INFO <- factor(stat19$SAMPLE_INFO, levels=c(1,0,2,3), 
+                             labels=c("150명(300-500병상)", "150명(500-1000병상)", 
+                                      "200명(1000-1500병상)", "250명(1500병상+)"))
+stat19$TargetSample_19 <- factor(stat19$TargetSample_19)
+
+ggplot(stat19, aes(x=sample_N, y=B, color=factor(SAMPLE_INFO))) + geom_point(aes(color=factor(SAMPLE_INFO)))  + geom_smooth(method="lm") + 
+      scale_x_continuous(limits=c(-1,60000)) + scale_y_continuous(limits=c(0,5)) + 
+ggtitle("19년(2차)") + xlab("기간 내 입원 환자") + ylab("오차한계")+ 
+  theme(legend.position = "bottom", legend.title = element_blank())  + 
+      scale_color_manual(values=fillPalette2)
+
+
+```
+
+## 1.2) 가상의 시나리오
+
+### (a) 기존 병원의 목표 표본수 확대
+```{r}
+cal_B <- function(N, n, sd) { 
+  hat_var <- sd * sqrt((N-n)/(N*n))
+  B <- 1.96 * hat_var
+  return (B)
+}
+
+stat17$B17_300 <- cal_B(stat17$sample_N, rep(300, 92), stat17$sample_SD)
+stat19$B19_300 <- cal_B(stat19$sample_N, rep(300, 149), stat19$sample_SD)
+
+stat17_300 <- stat17[,c("YKIHO_C", "sample_N", "B17_300")]
+colnames(stat17_300) <- c("YKIHO_C", "sample_N", "B")
+stat17_300$SAMPLE_INFO <- factor("시나리오:300명(전체)") 
+  
+cenario17_300 <- rbind(stat17_300, stat17[,c("YKIHO_C", "sample_N", "B", "SAMPLE_INFO")])
+
+fillPalette_300 <- c("Red", fillPalette1)
+ggplot(cenario17_300, aes(x=sample_N, y=B, color=factor(SAMPLE_INFO))) + geom_point(aes(color=factor(SAMPLE_INFO))) + 
+      scale_x_continuous(limits=c(-1,60000)) + scale_y_continuous(limits=c(0,5)) + 
+ggtitle("17년(1차)") + xlab("기간 내 입원 환자") + ylab("오차한계")+ 
+  theme(legend.position = "bottom", legend.title = element_blank())  + 
+      scale_color_manual(values=fillPalette_300)
+
+stat19_300 <- stat19[,c("YKIHO_C", "sample_N", "B19_300")]
+colnames(stat19_300) <- c("YKIHO_C", "sample_N", "B")
+stat19_300$SAMPLE_INFO <- factor("시나리오:300명(전체)") 
+  
+cenario19_300 <- rbind(stat19_300, stat19[,c("YKIHO_C", "sample_N", "B", "SAMPLE_INFO")])
+
+fillPalette2_300 <- c("Red", fillPalette2)
+ggplot(cenario19_300, aes(x=sample_N, y=B, color=factor(SAMPLE_INFO))) + geom_point(aes(color=factor(SAMPLE_INFO))) + 
+      scale_x_continuous(limits=c(-1,60000)) + scale_y_continuous(limits=c(0,5)) + 
+ggtitle("19년(2차)") + xlab("기간 내 입원 환자") + ylab("오차한계")+ 
+  theme(legend.position = "bottom", legend.title = element_blank())  + 
+      scale_color_manual(values=fillPalette2_300)
+
+```
+
+### (b) 3차 포함 예정의 신규 의료기관 (최악 case)
+
+```{r}
+theme_set(theme_bw())
+new_2021 = data.frame(read_excel('./2021_new.xlsx', sheet=1, range = "B6:E180", col_names=FALSE))
+colnames(new_2021) <- c("BED", "Establishment", "etc", "sample_N")
+
+# --> (100-300병상) --> 
+max_SD <- max(stat19[stat19$SAMPLE_INFO=="150명(300-500병상)", "sample_SD"])
+
+N <- new_2021$sample_N; 
+n100 <- c(); n150 <- c(); n300 <- c()
+for (i in 1:length(N)){
+  n100 <- c(n100, min(100, N[i]/10))
+  n150 <- c(n150, min(150, N[i]/10))
+  n300 <- c(n300, min(300, N[i]/10))
+}
+
+# 표본 크기 달성하지 못하는 병원
+sum(n100<100); sum(n150<150); sum(n300<300);
+
+B_100_max <- cbind(N=new_2021$sample_N, 
+                   B=cal_B(N=new_2021$sample_N, n=n100, sd=max_SD),
+                   type=100)
+B_150_max <- cbind(N=new_2021$sample_N, 
+                   B=cal_B(N=new_2021$sample_N, n=n150, sd=max_SD),
+                   type=150)
+B_300_max <- cbind(N=new_2021$sample_N, 
+                   B=cal_B(N=new_2021$sample_N, n=n300, sd=max_SD),
+                   type=300)
+
+stat19_2 <- stat19[stat19$TargetSample_19==150, c("sample_N", "B", "SAMPLE_INFO")]
+colnames(stat19_2) <- c("N", "B", "type")
+
+B_scenario <- data.frame(rbind(B_100_max, B_150_max, stat19_2))
+
+B_scenario$type <- factor(B_scenario$type, levels=c(100,150,"150명(300-500병상)","150명(500-1000병상)"), 
+                                                   labels=c("100명(100-300병상)", "150명(100-300병상)",
+                                                            "150명(300-500병상)","150명(500-1000병상)"))
+fillPalette3 <- c("#9d0b0b", "#da2d2d", "#0072B2", "#56B4E9")
+ggplot(B_scenario, aes(x=N, y=B, color=type)) + geom_point(aes(color=type), alpha=0.9)+
+  geom_jitter()  +  scale_x_continuous(limits=c(0,15000)) + scale_y_continuous(limits=c(0,6)) + 
+ggtitle("21년(3차) 예상") + xlab("기간 내 입원 환자") + ylab("오차한계")+ 
+  theme(legend.position = "bottom", legend.title = element_blank())  + 
+      scale_color_manual(values=fillPalette3)
+#
+B_scenario2 <- data.frame(rbind(B_100_max, B_150_max, B_300_max, stat19_2))
+
+B_scenario2$type <- factor(B_scenario2$type, levels=c(100, 150, 300,
+                                                    "150명(300-500병상)","150명(500-1000병상)"), 
+                                                   labels=c("100명(100-300병상)", "150명(100-300병상)",
+                                                            "300명(100-300병상)",
+                                                            "150명(300-500병상)","150명(500-1000병상)"))
+
+fillPalette3 <- c("#6c5b7c", "#c06c84", "red", "#0072B2", "#56B4E9")
+jitter <- position_jitter(width = 150, height = 0.1)
+ggplot(B_scenario2, aes(x=N, y=B, color=type)) + geom_point(aes(color=type), position = jitter) + scale_x_continuous(limits=c(0,15000)) + scale_y_continuous(limits=c(0,6)) + ggtitle("21년(3차) 예상") + xlab("기간 내 입원 환자") + ylab("오차한계")+ 
+  theme(legend.position = "bottom", legend.title = element_blank())  + 
+      scale_color_manual(values=fillPalette3)
+
+stat19_300_2 <- stat19_300[, c("sample_N", "B", "SAMPLE_INFO")]
+colnames(stat19_300_2) <- c("N", "B", "type")
+
+B_scenario3 <- data.frame(rbind(B_100_max, B_150_max, B_300_max, stat19_300_2))
+
+B_scenario3$type <- factor(B_scenario3$type, 
+                           levels=c(100, 150, 300,                                                    "시나리오:300명(전체)"), 
+                                                   labels=c("100명(100-300병상)", "150명(100-300병상)",
+                                                            "300명(전체)", 
+                                                            "300명(전체)"))
+
+fillPalette3 <- c("#6c5b7c", "#c06c84", "red")
+ggplot(B_scenario3, aes(x=N, y=B, color=type)) + geom_point(aes(color=type)) + scale_x_continuous(limits=c(0,15000)) + scale_y_continuous(limits=c(0,6)) + 
+ggtitle("21년(3차) 예상") + xlab("기간 내 입원 환자") + ylab("오차한계")+ 
+  theme(legend.position = "bottom", legend.title = element_blank())  + 
+      scale_color_manual(values=fillPalette3)
+
+```
+
+# 2. 과업 수행 과정에서의 표본 대표성 훼손
+## (2 → 3) 요양기관 평가대상자 연락처 제출 과정
+  - **(현행) 전화번호 미제출 과다 기관 존재, 요양기관별 미제출 비율 상이**
+  - 미제출율 20% 이상 기관 : '17년도 8개소 (11%), '19년도 25개소 (18%)로 증가함
+  - 기관별 평균 미제출율도 증가추세 ('17년도 6.9% → '19년도 10.8%)
+    * 아래의 작업은 STEP_2 변수(조사 표본으로의 선정 여부)의 무결성을 가정하고, **조사 표본으로 선정된 환자**를 대상으로 진행되었다.
+    * 전화번호 기재가 되었으나 미기재 사유가 기록된 (NOTE, NOTE_C 변수) 환자가 다수 존재하여, **미제출율(%)은 미기재 사유가 기록된 샘플을 기준으로 산출되었다.**
+    * 미제출율(%) 산식 : (미기재 사유가 기록된 레코드 수) / (전체 레코드 수) * 100
+    * 히스토그램 : 기관별 미제출율(%) 현황 (가로축 : 미제출율(%), 세로축 : 기관 수)
+
+## (1) 병원의 전화번호 미제출율(%) 분포
+
+```{r, echo=FALSE, message=FALSE}
+######## 미제출율(%) 계산 ########
+# 17년
+# "미기재 사유가 기록됨" 을 전화번호 미제출로 생각하고,
+# 전화번호 미제출율(%) = 전화번호 미제출 사유 기록됨 / 할당된 표본 수
+TEL_YES17 <- data.frame(xtabs(~YKIHO_C, data=data17.s2, subset= NOTE == ""))
+colnames(TEL_YES17) <- c("YKIHO_C", "YES_17")
+TEL_Total17 <- data.frame(xtabs(~YKIHO_C, data=data17.s2))
+colnames(TEL_Total17) <- c("YKIHO_C", "Total_17")
+
+TEL17 <- merge(TEL_Total17, TEL_YES17, by="YKIHO_C", all=TRUE)
+TEL17$NO_17 <- TEL17$Total - TEL17$YES
+TEL17$NO.percent_17 <- TEL17$NO / TEL17$Total * 100
+
+hospital_info17 <- merge(hospital_info17, TEL17, all.x=TRUE, by = 'YKIHO_C')
+
+hospital_info17$HIGH_PER17 <- ifelse(hospital_info17$NO.percent_17>=20, 1, 0)
+hospital_info17$CAPITAL17 <- ifelse(hospital_info17$HOS_LOCAL_17 %in% c("서울", "경기"), 1, 0)
+
+hospital_info17$HIGH_PER17 <- factor(hospital_info17$HIGH_PER17, levels=c(0,1), labels=c("미제출율 20% 미만", "미제출율 20% 이상"))
+hospital_info17$CAPITAL17 <- factor(hospital_info17$CAPITAL17, levels=c(0,1), labels=c( "비수도권", "수도권"))
+
+# data19의 미제출율(%)과 사유
+NOTEC19 <- data.frame("R1" = xtabs(~YKIHO_C+NOTE_C, data=data19.s2)[,1],
+                    "R2" = xtabs(~YKIHO_C+NOTE_C, data=data19.s2)[,2],
+                    "R3" = xtabs(~YKIHO_C+NOTE_C, data=data19.s2)[,3],
+                    "R4" = xtabs(~YKIHO_C+NOTE_C, data=data19.s2)[,4],
+                    "R5" = xtabs(~YKIHO_C+NOTE_C, data=data19.s2)[,5])
+
+# 미기재 사유 변수가 NA => 전화번호 기재로 해석
+TEL_YES19 <- data.frame(xtabs(~YKIHO_C, data=data19.s2, subset = is.na(NOTE_C)))
+colnames(TEL_YES19) <- c("YKIHO_C", "YES_19")
+
+TEL_Total19 <- data.frame(xtabs(~YKIHO_C, data=data19.s2))
+colnames(TEL_Total19) <- c("YKIHO_C", "Total_19")
+
+TEL19 <- merge(TEL_YES19, TEL_Total19, by = "YKIHO_C")
+TEL19$NO_19 <- TEL19$Total - TEL19$YES_19
+TEL19$NO.percent_19 <- TEL19$NO_19 / TEL19$Total_19 * 100
+
+hospital_info19 <- merge(hospital_info19, TEL19, all.x=TRUE, by = 'YKIHO_C')
+hospital_info19$HIGH_PER19 <- ifelse(hospital_info19$NO.percent_19>=20, 1, 0)
+hospital_info19$CAPITAL19 <- ifelse(hospital_info19$HOS_LOCAL_19 %in% c("서울특별시", "경기도"), 1, 0)
+
+hospital_info19$HIGH_PER19 <- factor(hospital_info19$HIGH_PER19, levels=c(0,1),labels=c("미제출율 20% 미만", "미제출율 20% 이상"))
+hospital_info19$CAPITAL19 <- factor(hospital_info19$CAPITAL19, levels=c(0,1), labels=c( "비수도권", "수도권"))
+
+# hospital_info에는 17, 19년도 전체 기록 저장
+hospital_info <- merge(hospital_info17, hospital_info19, all=TRUE, by='YKIHO_C')
+
+# 19년도 신규 확대 병원임을 나타내는 Target19 (19년도 완료표본 정보는 있으나, 17년 완료표본 정보는 없음)
+# 17, 19년도 모두 평가 대상이었던 병원임을 나타내는 TargetAll (17, 19년도 모두 완료표본 정보 있음)
+hospital_info$Target19 <- is.na(hospital_info$FinalSample_17) & !is.na(hospital_info$FinalSample_19)
+hospital_info$TargetAll <- !is.na(hospital_info$FinalSample_17) & !is.na(hospital_info$FinalSample_19)
+
+# YKIHO_C 의 맨 앞 A,B,C,D 는 병상수에 따라 배정되었으며, E는 의료원
+#hospital_info$YKIHO_C2 <- substr(hospital_info$YKIHO_C,1,1)
+```
+
+```{r, echo=F, warning=F, message=F }
+# 시각화
+theme_set(theme_bw())
+
+qplot(data=hospital_info, NO.percent_17, geom = "histogram", xlim=c(-1, 50)) + 
+  geom_histogram(color = 'black', fill = 'white')+ 
+  labs(title = "2017년(1차) 병원 미제출율(%) 분포", x = "미제출율 (%)", y = "COUNT")  + 
+  theme(axis.text.x = element_text(hjust = 1),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.x = element_line(color = "grey60", linetype = "dashed")) + 
+  stat_bin(geom="text", colour="black", size=3,
+           aes(label=..count.., y=..count.. + 1))+ 
+      scale_y_continuous(limits=c(-1,30))
+
+qplot(data=hospital_info, NO.percent_19, geom = "histogram", xlim=c(-1, 50)) + 
+  geom_histogram(color = 'black', fill = 'white')+ 
+  labs(title = "2019년(2차) 병원 미제출율(%) 분포", x = "미제출율(%)", y = "COUNT")  + 
+  theme(axis.text.x = element_text(hjust = 1),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.x = element_line(color = "grey60", linetype = "dashed")) + 
+  stat_bin(geom="text", colour="black", size=3,
+           aes(label=..count.., y=..count.. + 1))+ 
+      scale_y_continuous(limits=c(-1,30))
+
+cat(sprintf("'17 병원의 전화번호 미제출율(%%) \n - 평균 %.2f (%%), 표준편차 %.3f \n", mean(hospital_info$NO.percent_17, na.rm=TRUE), sd(hospital_info$NO.percent_17, na.rm=TRUE)))
+
+cat(sprintf("'19 병원의 전화번호 미제출율(%%) \n - 평균 %.2f (%%), 표준편차 %.3f \n\n", mean(hospital_info$NO.percent_19, na.rm=TRUE), sd(hospital_info$NO.percent_19, na.rm=TRUE)))
+
+hospital_all <- hospital_info[hospital_info$TargetAll,]
+
+hospital_all$NO_change <- (hospital_all$NO.percent_19 - hospital_all$NO.percent_17)
+hospital_all$overall_change <- hospital_all$overall_19 - hospital_all$overall_17
+
+qplot(data=hospital_all, NO_change, geom = "histogram", xlim=c(-30, 30)) + 
+  geom_histogram(color = 'black', fill = 'white')+ 
+  labs(title = "1차->2차로의 미제출율(%) 변화", x = "미제출율(%) 변화 ", y = "COUNT")  + 
+  theme(axis.text.x = element_text(hjust = 1),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.x = element_line(color = "grey60", linetype = "dashed")) + 
+  stat_bin(geom="text", colour="black", size=3,
+           aes(label=..count.., y=..count.. + 1))+ 
+      scale_y_continuous(limits=c(-1,30))
+
+
+cat(sprintf("'전화번호 미제출율(%%)의 변화 \n - 평균 %.2f (%%), 표준편차 %.3f \n\n", mean(hospital_all$NO_change, na.rm=TRUE), sd(hospital_all$NO_change, na.rm=TRUE)))
+
+```
+
+### 각 지역의 전화번호 미제출율(%) 평균
+
+```{r, message=FALSE, warning=F,echo=FALSE}
+# 19년도
+Local19 <- ifelse(nchar(hospital_info19$HOS_LOCAL_19)!=4, 
+                  substr(hospital_info19$HOS_LOCAL_19,1,2),
+                  paste0(substr(hospital_info19$HOS_LOCAL_19,1,1),substr(hospital_info19$HOS_LOCAL_19,3,3)))
+
+hospital_info19$HOS_LOCAL_19 <- Local19
+
+# 지역별 미제출율(%) 평균
+hos_summary17 <- hospital_info17 %>% group_by(HOS_LOCAL_17) %>% 
+  summarise(Mean = mean(NO.percent_17),
+            Median = median(NO.percent_17),
+            SD = sd(NO.percent_17),
+            N = n())
+hos_summary19 <- hospital_info19 %>% group_by(HOS_LOCAL_19) %>% 
+  summarise(Mean = mean(NO.percent_19),
+            Median = median(NO.percent_19),
+            SD = sd(NO.percent_19),
+            N = n())
+
+hos_summary17$year <- "17년도(1차)"
+hos_summary17$info <- sprintf(paste0(round(hos_summary17$Mean,1), "\n(", hos_summary17$N,")"))
+
+hos_summary19$year <- "19년도(2차)"
+hos_summary19$info <- sprintf(paste0(round(hos_summary19$Mean,1), "\n(", hos_summary19$N,")"))
+
+colnames(hos_summary17) <- c("HOS_LOCAL", "Mean", "Median", "SD", "N", "Year", "Info")
+colnames(hos_summary19) <- c("HOS_LOCAL", "Mean", "Median", "SD", "N", "Year", "Info")
+
+hos_summary <- rbind(hos_summary17,
+                     hos_summary19)
+
+ggplot(hos_summary) + 
+  geom_bar(aes(x=HOS_LOCAL, y = Mean, fill = Year), stat = "identity", position="dodge") + 
+  geom_text(aes(x=HOS_LOCAL, y = Mean+5, label = Info, group=Year),
+    position = position_dodge(width = 1), size = 5) + 
+  ggtitle("지역별 미제출율(%)") + xlab("지역") + ylab("미제출율 (%)")  + 
+  theme(axis.text.x = element_text(size=15,hjust = 1),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.major.y = element_line(color = "grey60", linetype = "dashed"))+ 
+      scale_y_continuous(limits=c(-1,45)) + theme(legend.position = "bottom", legend.title=element_blank()) + 
+  scale_fill_brewer(palette = "Paired")
+
+# 지역별 미제출율(%) 변화
+hos_summary_ch <- hospital_all %>% group_by(HOS_LOCAL_17) %>% 
+  summarise(Mean = mean(NO_change),
+            Median = median(NO_change),
+            SD = sd(NO_change),
+            N = n())
+                                                         
+ggplot(hos_summary_ch, aes(x = HOS_LOCAL_17, y = Mean)) + 
+  geom_bar(stat = "identity", color = 'black', fill = 'white') + 
+  geom_text(aes(y = Mean+3, label = paste0(round(Mean,2), " (", N,")")), size = 3, vjust = 1.5) + 
+  ggtitle("1차->2차 지역별 미제출율(%) 변화(수)") + xlab("지역") + ylab("미제출율(%)") + 
+  theme(axis.text.x = element_text(hjust = 1),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.major.y = element_line(color = "grey60", linetype = "dashed"))+ 
+      scale_y_continuous(limits=c(-1,45))
+
+hospital_info[order(hospital_info$NO.percent_19, decreasing=T),c("YKIHO_C", "NO.percent_19")][1:10,]
+
+# 울산 : D103, D105
+TEL_NO_TOP10 <- hospital_info[order(hospital_info$NO.percent_19, decreasing=T),][1:10,"YKIHO_C"]
+
+NOTEC19$YKIHO_C <- rownames(NOTEC19)
+
+TEL_NO_TOP10_R <- NOTEC19[NOTEC19$YKIHO_C %in% TEL_NO_TOP10, ]
+
+```
+
+### 19년도 4분기 간호등급별 미제출율(%) 평균 
+```{r, echo=F, warning=F, message=F }
+hos_summary_nurse <- hospital_info19 %>% group_by(NURSE4.19) %>% 
+  summarise(Mean19 = mean(NO.percent_19),
+            Median19 = median(NO.percent_19),
+            SD19 = sd(NO.percent_19))
+
+ggplot(hos_summary_nurse, aes(x = NURSE4.19, y = Mean19)) + 
+  geom_bar(stat = "identity", color = 'black', fill = 'white') + theme(axis.text.x=element_text(hjust=1)) + 
+  geom_text(aes(y = Mean19+2, label = round(Mean19,2)), size = 4, vjust = 1.5) + 
+  ggtitle("19년 4분기 간호등급별 미제출율(%) 평균") + xlab("19년 4분기 간호등급") + ylab("미제출율(%) (%)") + 
+  theme(axis.text.x = element_text(hjust = 1),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.major.y = element_line(color = "grey60", linetype = "dashed"))+ 
+      scale_y_continuous(limits=c(-1,20))
+
+```
+
+
+### (문제점) 
+  - 대표성 훼손 : 전화번호 제출자 기준 어떠한 조사도 상위 집단을 대표하지 않음
+  - **'19년도에서는 종합병원 대상 6개항목 최종점수 모두 미제출율(%)과 유의한 상관관계 보고됨**
+    * 아래 그림은 최종점수 중 <6. 전반적 평가> 와 미제출률의 산포도 및 추세선
+
+## (2) 미제출율(%)에 따른 평가 점수
+### 2.1. 17, 19년도 
+```{r, echo=F, message=F}
+theme_set(theme_bw())
+## overall
+ggplot(hospital_info17, aes(x=NO.percent_17, y=overall_17, color=RECU_CL_CD_17)) + geom_point()  + geom_smooth(method="lm")  + ggtitle("17년(1차)") + xlab("미제출율(%)") + ylab("평가점수") + theme(legend.position = "bottom", legend.title=element_blank()) + scale_colour_brewer(palette = "Set1") + 
+      scale_x_continuous(limits=c(-1,45)) + scale_y_continuous(limits=c(70,95)) + 
+    theme(axis.text.x = element_text(hjust = 1),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.minor.x = element_blank()) 
+
+lm.overall17_1 <- lm (overall_17 ~  NO.percent_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="상급종합병원",])
+lm.overall17_2 <- lm (overall_17 ~  NO.percent_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="종합병원",])
+
+## overall
+ggplot(hospital_info19, aes(x=NO.percent_19, y=overall_19, color=RECU_CL_CD_19)) + geom_point()  + geom_smooth(method="lm")  + ggtitle("19년(2차)") + xlab("미제출율(%)") + ylab("평가점수") + theme(legend.position = "bottom", legend.title=element_blank())+ scale_colour_brewer(palette = "Set1")+ 
+      scale_x_continuous(limits=c(-1,45)) + scale_y_continuous(limits=c(70,95)) + 
+    theme(axis.text.x = element_text(hjust = 1),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.minor.x = element_blank()) 
+
+lm.overall19_1 <- lm(overall_19 ~  NO.percent_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="상급종합병원",])
+lm.overall19_2 <- lm(overall_19 ~  NO.percent_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="종합병원",])
+
+
+cat(sprintf(" <-- Result (17) --> \n"))
+cat(sprintf(" - 상급 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.overall17_1)$coef[1,1], summary(lm.overall17_1)$coef[2,1], summary(lm.overall17_1)$coef[2,4]))
+cat(sprintf(" - 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.overall17_2)$coef[1,1], summary(lm.overall17_2)$coef[2,1], summary(lm.overall17_2)$coef[2,4]))
+
+cat(sprintf(" <-- Result (19) --> \n"))
+cat(sprintf(" - 상급 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.overall19_1)$coef[1,1], summary(lm.overall19_1)$coef[2,1], summary(lm.overall19_1)$coef[2,4]))
+cat(sprintf(" - 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.overall19_2)$coef[1,1], summary(lm.overall19_2)$coef[2,1], summary(lm.overall19_2)$coef[2,4]))
+```
+
+```{r, echo=F, eval=F}
+#############################
+#    실행되지 않는 코드     #
+#############################
+## part1
+ggplot(hospital_info17, aes(x=NO.percent_17, y=part1_17, color=RECU_CL_CD_17)) + geom_point()  + geom_smooth(method="lm") + ggtitle("2017년(1차) 영역별 평가점수 : 1. 간호사 서비스") + xlab("미제출율(%)") + ylab("평가점수") + scale_color_discrete(name = "요양기관 종별", labels = c("상급종합병원", "종합병원"))+ theme(legend.position = "bottom")
+lm.part11 <- lm (part1_17 ~  NO.percent_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="상급종합병원",])
+lm.part12 <- lm (part1_17 ~  NO.percent_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="종합병원",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 상급 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part11)$coef[1,1], summary(lm.part11)$coef[2,1], summary(lm.part11)$coef[2,4]))
+cat(sprintf(" - 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part12)$coef[1,1], summary(lm.part12)$coef[2,1], summary(lm.part12)$coef[2,4]))
+
+## part2
+ggplot(hospital_info17, aes(x=NO.percent_17, y=part2_17, color=RECU_CL_CD_17)) + geom_point()  + geom_smooth(method="lm")  + ggtitle("2017년(1차) 영역별 평가점수 : 2. 의사 서비스") + xlab("미제출율(%)") + ylab("평가점수") + scale_color_discrete(name = "요양기관 종별", labels = c("상급종합병원", "종합병원"))+ theme(legend.position = "bottom")
+lm.part21 <- lm (part2_17 ~  NO.percent_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="상급종합병원",])
+lm.part22 <- lm (part2_17 ~  NO.percent_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="종합병원",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 상급 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part21)$coef[1,1], summary(lm.part21)$coef[2,1], summary(lm.part21)$coef[2,4]))
+cat(sprintf(" - 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part22)$coef[1,1], summary(lm.part22)$coef[2,1], summary(lm.part22)$coef[2,4]))
+
+## part3
+ggplot(hospital_info17, aes(x=NO.percent_17, y=part3_17, color=RECU_CL_CD_17)) + geom_point()  + geom_smooth(method="lm")+ ggtitle("2017년(1차) 영역별 평가점수 : 3. 투약 및 치료") + xlab("미제출율(%)") + ylab("평가점수") + scale_color_discrete(name = "요양기관 종별", labels = c("상급종합병원", "종합병원"))+ theme(legend.position = "bottom")
+lm.part31 <- lm (part3_17 ~  NO.percent_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="상급종합병원",])
+lm.part32 <- lm (part3_17 ~  NO.percent_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="종합병원",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 상급 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part31)$coef[1,1], summary(lm.part31)$coef[2,1], summary(lm.part31)$coef[2,4]))
+cat(sprintf(" - 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part32)$coef[1,1], summary(lm.part32)$coef[2,1], summary(lm.part32)$coef[2,4]))
+
+## part4
+ggplot(hospital_info17, aes(x=NO.percent_17, y=part4_17, color=RECU_CL_CD_17)) + geom_point()  + geom_smooth(method="lm") + ggtitle("2017년(1차) 영역별 평가점수 : 4.병원 환경") + xlab("미제출율(%)") + ylab("평가점수") + scale_color_discrete(name = "요양기관 종별", labels = c("상급종합병원", "종합병원"))+ theme(legend.position = "bottom")
+lm.part41 <- lm (part4_17 ~  NO.percent_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="상급종합병원",])
+lm.part42 <- lm (part4_17 ~  NO.percent_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="종합병원",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 상급 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part41)$coef[1,1], summary(lm.part41)$coef[2,1], summary(lm.part41)$coef[2,4]))
+cat(sprintf(" - 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part42)$coef[1,1], summary(lm.part42)$coef[2,1], summary(lm.part42)$coef[2,4]))
+
+## part5
+ggplot(hospital_info17, aes(x=NO.percent_17, y=part5_17, color=RECU_CL_CD_17)) + geom_point()  + geom_smooth(method="lm") + ggtitle("2017년(1차) 영역별 평가점수 : 5. 환자권리 보장") + xlab("미제출율(%)") + ylab("평가점수") + scale_color_discrete(name = "요양기관 종별", labels = c("상급종합병원", "종합병원"))+ theme(legend.position = "bottom")
+lm.part51 <- lm (part5_17 ~  NO.percent_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="상급종합병원",])
+lm.part52 <- lm (part5_17 ~  NO.percent_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="종합병원",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 상급 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part51)$coef[1,1], summary(lm.part51)$coef[2,1], summary(lm.part51)$coef[2,4]))
+cat(sprintf(" - 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part52)$coef[1,1], summary(lm.part52)$coef[2,1], summary(lm.part52)$coef[2,4]))
+
+```
+
+```{r, echo=F,eval=F}
+#############################
+#    실행되지 않는 코드     #
+#############################
+## part1
+ggplot(hospital_info19, aes(x=NO.percent_19, y=part1_19, color=RECU_CL_CD_19)) + geom_point()  + geom_smooth(method="lm") + ggtitle("2019년(1차) 영역별 평가점수 : 1. 간호사 서비스") + xlab("미제출율(%)") + ylab("평가점수") + scale_color_discrete(name = "요양기관 종별", labels = c("상급종합병원", "종합병원"))+ theme(legend.position = "bottom")
+lm.part11 <- lm (part1_19 ~  NO.percent_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="상급종합병원",])
+lm.part12 <- lm (part1_19 ~  NO.percent_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="종합병원",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 상급 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part11)$coef[1,1], summary(lm.part11)$coef[2,1], summary(lm.part11)$coef[2,4]))
+cat(sprintf(" - 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part12)$coef[1,1], summary(lm.part12)$coef[2,1], summary(lm.part12)$coef[2,4]))
+
+## part2
+ggplot(hospital_info19, aes(x=NO.percent_19, y=part2_19, color=RECU_CL_CD_19)) + geom_point()  + geom_smooth(method="lm")  + ggtitle("2019년(1차) 영역별 평가점수 : 2. 의사 서비스") + xlab("미제출율(%)") + ylab("평가점수") + scale_color_discrete(name = "요양기관 종별", labels = c("상급종합병원", "종합병원"))+ theme(legend.position = "bottom")
+lm.part21 <- lm (part2_19 ~  NO.percent_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="상급종합병원",])
+lm.part22 <- lm (part2_19 ~  NO.percent_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="종합병원",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 상급 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part21)$coef[1,1], summary(lm.part21)$coef[2,1], summary(lm.part21)$coef[2,4]))
+cat(sprintf(" - 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part22)$coef[1,1], summary(lm.part22)$coef[2,1], summary(lm.part22)$coef[2,4]))
+
+## part3
+ggplot(hospital_info19, aes(x=NO.percent_19, y=part3_19, color=RECU_CL_CD_19)) + geom_point()  + geom_smooth(method="lm")+ ggtitle("2019년(1차) 영역별 평가점수 : 3. 투약 및 치료") + xlab("미제출율(%)") + ylab("평가점수") + scale_color_discrete(name = "요양기관 종별", labels = c("상급종합병원", "종합병원"))+ theme(legend.position = "bottom")
+lm.part31 <- lm (part3_19 ~  NO.percent_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="상급종합병원",])
+lm.part32 <- lm (part3_19 ~  NO.percent_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="종합병원",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 상급 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part31)$coef[1,1], summary(lm.part31)$coef[2,1], summary(lm.part31)$coef[2,4]))
+cat(sprintf(" - 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part32)$coef[1,1], summary(lm.part32)$coef[2,1], summary(lm.part32)$coef[2,4]))
+
+## part4
+ggplot(hospital_info19, aes(x=NO.percent_19, y=part4_19, color=RECU_CL_CD_19)) + geom_point()  + geom_smooth(method="lm") + ggtitle("2019년(1차) 영역별 평가점수 : 4.병원 환경") + xlab("미제출율(%)") + ylab("평가점수") + scale_color_discrete(name = "요양기관 종별", labels = c("상급종합병원", "종합병원"))+ theme(legend.position = "bottom")
+lm.part41 <- lm (part4_19 ~  NO.percent_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="상급종합병원",])
+lm.part42 <- lm (part4_19 ~  NO.percent_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="종합병원",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 상급 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part41)$coef[1,1], summary(lm.part41)$coef[2,1], summary(lm.part41)$coef[2,4]))
+cat(sprintf(" - 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part42)$coef[1,1], summary(lm.part42)$coef[2,1], summary(lm.part42)$coef[2,4]))
+
+## part5
+ggplot(hospital_info19, aes(x=NO.percent_19, y=part5_19, color=RECU_CL_CD_19)) + geom_point()  + geom_smooth(method="lm") + ggtitle("2019년(1차) 영역별 평가점수 : 5. 환자권리 보장") + xlab("미제출율(%)") + ylab("평가점수") + scale_color_discrete(name = "요양기관 종별", labels = c("상급종합병원", "종합병원"))+ theme(legend.position = "bottom")
+lm.part51 <- lm (part5_19 ~  NO.percent_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="상급종합병원",])
+lm.part52 <- lm (part5_19 ~  NO.percent_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="종합병원",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 상급 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part51)$coef[1,1], summary(lm.part51)$coef[2,1], summary(lm.part51)$coef[2,4]))
+cat(sprintf(" - 종합 병원 : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part52)$coef[1,1], summary(lm.part52)$coef[2,1], summary(lm.part52)$coef[2,4]))
+
+```
+
+### 2.2. 2차 확대 대상 병원 
+
+ - '19에 평가 대상으로 포함된 병원 61곳은 미제출율(%)과 평가점수간의 유의한 상관관계가 보고됨.
+ - '17, '19에 모두 포함된 병원 92곳은 미제출율(%)과 평가점수간의 유의한 상관관계가 보고됨.
+  * 그림(아래) : 최종점수 중 <6. 전반적 평가>와 미제출율(%)의 산포도 및 추세선
+  
+```{r, echo=F, message=F, warning=F}
+theme_set(theme_bw())
+## overall
+hospital_info$Target19 <- factor(hospital_info$Target19, levels=c(FALSE,TRUE), labels=c("1,2차 대상", "2차 확대 대상"))
+
+ggplot(hospital_info, aes(x=NO.percent_19, y=overall_19, color=Target19)) + 
+  geom_point() + geom_smooth(method="lm") + ggtitle("19년(2차)") +  xlab("미제출율(%)") + ylab("평가점수") + theme(legend.position = "bottom", legend.title = element_blank())+ scale_colour_brewer(palette="Set2") +       scale_x_continuous(limits=c(-1,45)) + scale_y_continuous(limits=c(70,95))+ 
+    theme(axis.text.x = element_text(hjust = 1),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.minor.x = element_blank()) 
+
+lm.overall_new <- lm (overall_19 ~  NO.percent_19, data=hospital_info[hospital_info$Target19=="1,2차 대상", ])
+lm.overall <- lm (overall_19 ~  NO.percent_19, data=hospital_info[hospital_info$Target19=="2차 확대 대상", ])
+
+```
+
+```{r, echo=F, message=F,eval=F}
+#############################
+#    실행되지 않는 코드     #
+#############################
+
+theme_set(theme_bw())
+
+## part1
+ggplot(hospital_info, aes(x=NO.percent_19, y=part1_19, color=Target19)) + geom_point()  + geom_smooth(method="lm")  + 
+ggtitle("2019년(2차) 병원 6. 전반적 평가") + xlab("미제출율(%)") + ylab("평가점수") + theme(legend.position = "bottom") + scale_color_discrete(name = "조사대상", labels = c("1,2차 모두 포함", "2차에만 포함"))
+
+lm.part1_new <- lm (part1_19 ~  NO.percent_19, data=hospital_info[hospital_info$Target19, ])
+lm.part1 <- lm (part1_19 ~  NO.percent_19, data=hospital_info[!hospital_info$Target19, ])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 병원 (2차 대상에만 포함) : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part1_new)$coef[1,1], summary(lm.part1_new)$coef[2,1], summary(lm.part1_new)$coef[2,4]))
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 병원 (1, 2차 모두 포함) : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part1)$coef[1,1], summary(lm.part1)$coef[2,1], summary(lm.part1)$coef[2,4]))
+
+## part2
+ggplot(hospital_info, aes(x=NO.percent_19, y=part2_19, color=Target19)) + geom_point()  + geom_smooth(method="lm")  + 
+ggtitle("2019년(2차) 병원 6. 전반적 평가") + xlab("미제출율(%)") + ylab("평가점수") + theme(legend.position = "bottom") + scale_color_discrete(name = "조사대상", labels = c("1,2차 모두 포함", "2차에만 포함"))
+
+lm.part2_new <- lm (part2_19 ~  NO.percent_19, data=hospital_info[hospital_info$Target19, ])
+lm.part2 <- lm (part2_19 ~  NO.percent_19, data=hospital_info[!hospital_info$Target19, ])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 병원 (2차 대상에만 포함) : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part2_new)$coef[1,1], summary(lm.part2_new)$coef[2,1], summary(lm.part2_new)$coef[2,4]))
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 병원 (1, 2차 모두 포함) : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part2)$coef[1,1], summary(lm.part2)$coef[2,1], summary(lm.part2)$coef[2,4]))
+
+## part3
+ggplot(hospital_info, aes(x=NO.percent_19, y=part3_19, color=Target19)) + geom_point()  + geom_smooth(method="lm")  + 
+ggtitle("2019년(1차) 종합병원 6. 전반적 평가") + xlab("미제출율(%)") + ylab("평가점수") + theme(legend.position = "bottom") + scale_color_discrete(name = "조사대상", labels = c("1,2차 모두 포함", "2차에만 포함"))
+
+lm.part3_new <- lm (part3_19 ~  NO.percent_19, data=hospital_info[hospital_info$Target19, ])
+lm.part3 <- lm (part3_19 ~  NO.percent_19, data=hospital_info[!hospital_info$Target19, ])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 병원 (2차 대상에만 포함) : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part3_new)$coef[1,1], summary(lm.part3_new)$coef[2,1], summary(lm.part3_new)$coef[2,4]))
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 병원 (1, 2차 모두 포함) : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part3)$coef[1,1], summary(lm.part3)$coef[2,1], summary(lm.part3)$coef[2,4]))
+
+## part4
+ggplot(hospital_info, aes(x=NO.percent_19, y=part4_19, color=Target19)) + geom_point()  + geom_smooth(method="lm")  + 
+ggtitle("2019년(1차) 종합병원 6. 전반적 평가") + xlab("미제출율(%)") + ylab("평가점수") + theme(legend.position = "bottom") + scale_color_discrete(name = "조사대상", labels = c("1,2차 모두 포함", "2차에만 포함"))
+
+lm.part4_new <- lm (part4_19 ~  NO.percent_19, data=hospital_info[hospital_info$Target19, ])
+lm.part4 <- lm (part4_19 ~  NO.percent_19, data=hospital_info[!hospital_info$Target19, ])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 병원 (2차 대상에만 포함) : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part4_new)$coef[1,1], summary(lm.part4_new)$coef[2,1], summary(lm.part4_new)$coef[2,4]))
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 병원 (1, 2차 모두 포함) : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part4)$coef[1,1], summary(lm.part4)$coef[2,1], summary(lm.part4)$coef[2,4]))
+
+## part5
+ggplot(hospital_info, aes(x=NO.percent_19, y=part5_19, color=Target19)) + geom_point()  + geom_smooth(method="lm")  + 
+ggtitle("2019년(1차) 종합병원 6. 전반적 평가") + xlab("미제출율(%)") + ylab("평가점수") + theme(legend.position = "bottom") + scale_color_discrete(name = "조사대상", labels = c("1,2차 모두 포함", "2차에만 포함"))
+
+lm.part5_new <- lm (part5_19 ~  NO.percent_19, data=hospital_info[hospital_info$Target19, ])
+lm.part5 <- lm (part5_19 ~  NO.percent_19, data=hospital_info[!hospital_info$Target19, ])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 병원 (2차 대상에만 포함) : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part5_new)$coef[1,1], summary(lm.part5_new)$coef[2,1], summary(lm.part5_new)$coef[2,4]))
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 병원 (1, 2차 모두 포함) : \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.part5)$coef[1,1], summary(lm.part5)$coef[2,1], summary(lm.part5)$coef[2,4]))
+```
+
+### 2.3. 1,2차 평가에 모두 포함된 병원 88곳의 변화 
+ - 전화번호 미제출율(%) 변화와 평가점수 변화 간의 유의한 상관관계는 보이지 않았다.
+ - '19년 전화번호 미제출율(%)과 평가점수 변화 간의 유의한 상관관계는 보이지 않았다.
+ - 전화번호 미제출율(%) 변화와 '19년 평가점수 변화 간의 유의한 상관관계가 보고 되었다.
+ - 전화번호 미제출율(%)과 평가점수의 변화는 **19년도 - 17년도**로 계산되었다.
+ 
+```{r, echo=F, message=F, warnings=F}
+theme_set(theme_bw())
+# 전화번호 미제출율(%) 변화, 평가 점수 변화
+ggplot(hospital_all, aes(x=NO_change, y=overall_change, color = RECU_CL_CD_19)) + geom_point() + geom_smooth(method="lm") + 
+ggtitle("17->19년 6. 전박적 평가점수의 변화") + xlab("미제출율(%) 변화") + ylab("평가점수") + theme(legend.position = "bottom") + scale_color_discrete(name = "요양기관종별")
+
+# 전화번호 미제출율(%) 변화, '19 평가 점수
+ggplot(hospital_all, aes(x=NO_change, y=overall_19, color = RECU_CL_CD_19)) + geom_point() + geom_smooth(method="lm")  + 
+ggtitle("2019년(2차)") + xlab("미제출율(%)의 변화") + ylab("평가점수") + theme(legend.position = "bottom") + scale_color_discrete(name = "요양기관종별")
+
+lm.overall1 <- lm (overall_change ~  NO_change, data=hospital_all[hospital_all$RECU_CL_CD_19=="상급종합병원", ])
+lm.overall2 <- lm (overall_change ~  NO_change, data=hospital_all[hospital_all$RECU_CL_CD_19=="종합병원", ])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 상급 종합 병원 : \n")) # 61
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.overall1)$coef[1,1], summary(lm.overall1)$coef[2,1], summary(lm.overall1)$coef[2,4]))
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 종합 병원 : \n")) # 92
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) (p-value : %.3f)\n", summary(lm.overall2)$coef[1,1], summary(lm.overall2)$coef[2,1], summary(lm.overall2)$coef[2,4]))
+
+
+lm.overall3 <- lm (overall_19 ~  NO_change, data=hospital_all[hospital_all$RECU_CL_CD_19=="상급종합병원", ])
+lm.overall4 <- lm (overall_19 ~  NO_change, data=hospital_all[hospital_all$RECU_CL_CD_19=="종합병원", ])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 상급 종합 병원 : \n")) # 61
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) 변화 (p-value : %.3f)\n", summary(lm.overall3)$coef[1,1], summary(lm.overall3)$coef[2,1], summary(lm.overall3)$coef[2,4]))
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf(" - 종합 병원 : \n")) # 92
+cat(sprintf("평가 점수 = %.2f + %.2f * 미제출율(%%) 변화 (p-value : %.3f)\n", summary(lm.overall4)$coef[1,1], summary(lm.overall4)$coef[2,1], summary(lm.overall4)$coef[2,4]))
+
+```
+
+## (3) 허가병상수에 따른 미제출율(%) 
+ - 대부분의 허가병상수와 전화번호 미제출율(%)간의 상관관계가 유의미하지 않았다.
+ 
+```{r, echo=F, message=F, eval=F}
+theme_set(theme_bw())
+
+## 허가병상수17 ~ 미제출율(%)17
+ggplot(hospital_info17, aes(x=BED_17, y=NO.percent_17, color=RECU_CL_CD_17)) + geom_point()  + geom_smooth(method="lm")  + 
+ggtitle("2017년(1차) 전화번호 미제출") + xlab("17년 허가병상수") + ylab("평가점수") + theme(legend.position = "bottom")  + scale_color_discrete(name = "요양기관종별")
+
+lm.overall17_1 <- lm(BED_17 ~  NO.percent_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="상급종합병원",])
+lm.overall17_2 <- lm(BED_17 ~  NO.percent_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="종합병원",])
+
+
+## 허가병상수19 ~ 미제출율(%)19
+ggplot(hospital_info19, aes(x=BED_19, y=NO.percent_19, color=RECU_CL_CD_19)) + geom_point()  + geom_smooth(method="lm")  + 
+ggtitle("2019년(1차) 전화번호 미제출") + xlab("19년 허가병상수") + ylab("평가점수") + theme(legend.position = "bottom") + scale_color_discrete(name = "요양기관종별")
+
+lm.overall19_1 <- lm(BED_19 ~  NO.percent_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="상급종합병원",])
+lm.overall19_2 <- lm(BED_19 ~  NO.percent_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="종합병원",])
+
+cat(sprintf(" <-- Result (17) --> \n"))
+cat(sprintf("미제출율 = %.2f + %.2f * 허가병상수 (p-value : %.3f)\n", summary(lm.overall17_1)$coef[1,1], summary(lm.overall17_1)$coef[2,1], summary(lm.overall17_1)$coef[2,4]))
+cat(sprintf("미제출율 = %.2f + %.2f * 허가병상수 (p-value : %.3f)\n", summary(lm.overall17_2)$coef[1,1], summary(lm.overall17_2)$coef[2,1], summary(lm.overall17_2)$coef[2,4]))
+
+cat(sprintf(" <-- Result (19) --> \n"))
+cat(sprintf("미제출율 = %.2f + %.2f * 허가병상수 (p-value : %.3f)\n", summary(lm.overall19_1)$coef[1,1], summary(lm.overall19_1)$coef[2,1], summary(lm.overall19_1)$coef[2,4]))
+cat(sprintf("미제출율 = %.2f + %.2f * 허가병상수 (p-value : %.3f)\n", summary(lm.overall19_2)$coef[1,1], summary(lm.overall19_2)$coef[2,1], summary(lm.overall19_2)$coef[2,4]))
+```
+
+## (4) 조사 기간 동안의 방문 환자에 따른 미제출율(%) 
+### 4.1 전체 입원 환자
+
+ - 조사 기간 동안의 입원 환자의 전화번호 미제출율(%) 간의 유의미한 상관관계는 보고되지 않았다.
+
+```{r, echo=F, message=F, eval=F}
+ggplot(hospital_info17, aes(x=sqrt(VISIT_17), y=NO.percent_17, color=RECU_CL_CD_17)) + geom_point() + geom_smooth(method="lm")  + 
+ggtitle("2017년(1차) 전화번호 미제출") + xlab("조사 기간 동안의 입원 환자 수") + ylab("전화번호 미제출율(%)")+ theme(legend.position = "bottom")  + scale_color_discrete(name = "요양기관종별")
+
+
+lm.overall17_1 <- lm(NO.percent_17 ~  sqrt(VISIT_17), data=hospital_info17[hospital_info17$RECU_CL_CD_17=="상급종합병원",])
+lm.overall17_2 <- lm(NO.percent_17 ~  sqrt(VISIT_17), data=hospital_info17[hospital_info17$RECU_CL_CD_17=="종합병원",])
+
+ggplot(hospital_info19, aes(x=sqrt(VISIT_19), y=NO.percent_19, color=RECU_CL_CD_19)) + geom_point() + geom_smooth(method="lm")  + 
+ggtitle("2019년(2차) 전화번호 미제출") + xlab("조사 기간 동안의 입원 환자 수") + ylab("전화번호 미제출율(%)")+ theme(legend.position = "bottom")  + scale_color_discrete(name = "요양기관종별")
+
+
+lm.overall1 <- lm(NO.percent_19 ~  sqrt(VISIT_19), data=hospital_info19[hospital_info19$RECU_CL_CD_19=="상급종합병원",])
+lm.overall2 <- lm(NO.percent_19 ~  sqrt(VISIT_19), data=hospital_info19[hospital_info19$RECU_CL_CD_19=="종합병원",])
+
+
+cat(sprintf(" <-- Result (17) --> \n"))
+cat(sprintf("미제출 = %.2f + %.2f * 입원 환자 수 (p-value : %.3f)\n", summary(lm.overall1)$coef[1,1], summary(lm.overall1)$coef[2,1], summary(lm.overall1)$coef[2,4]))
+cat(sprintf("미제출 = %.2f + %.2f * 입원 환자 수 (p-value : %.3f)\n", summary(lm.overall2)$coef[1,1], summary(lm.overall2)$coef[2,1], summary(lm.overall2)$coef[2,4]))
+
+
+cat(sprintf(" <-- Result (19) --> \n"))
+cat(sprintf("미제출 = %.2f + %.2f * 입원 환자 수 (p-value : %.3f)\n", summary(lm.overall1)$coef[1,1], summary(lm.overall1)$coef[2,1], summary(lm.overall1)$coef[2,4]))
+cat(sprintf("미제출 = %.2f + %.2f * 입원 환자 수 (p-value : %.3f)\n", summary(lm.overall2)$coef[1,1], summary(lm.overall2)$coef[2,1], summary(lm.overall2)$coef[2,4]))
+
+```
+
+### 4.2 수술 환자
+```{r, message=F, echo=F, warning=F, eval=F}
+ggplot(hospital_info17, aes(x=surgery_17, y=NO.percent_17, color=RECU_CL_CD_17)) + geom_point() + geom_smooth(method="lm")  + 
+ggtitle("2017년(1차) 전화번호 미제출") + xlab("조사 기간 동안의 수술 환자 수") + ylab("전화번호 미제출율(%)")+ theme(legend.position = "bottom") + scale_color_discrete(name = "요양기관종별")
+
+lm.overall1 <- lm(NO.percent_17 ~ surgery_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="상급종합병원",])
+lm.overall2 <- lm(NO.percent_17 ~ surgery_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="종합병원",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("미제출 = %.2f + %.2f * 수술 환자 수 (p-value : %.3f)\n", summary(lm.overall1)$coef[1,1], summary(lm.overall1)$coef[2,1], summary(lm.overall1)$coef[2,4]))
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("미제출 = %.2f + %.2f * 수술 환자 수 (p-value : %.3f)\n", summary(lm.overall2)$coef[1,1], summary(lm.overall2)$coef[2,1], summary(lm.overall2)$coef[2,4]))
+
+ggplot(hospital_info19, aes(x=surgery_19, y=NO.percent_19, color=RECU_CL_CD_19)) + geom_point() + geom_smooth(method="lm")  + 
+ggtitle("2019년(2차) 전화번호 미제출") + xlab("조사 기간 동안의 수술 환자 수") + ylab("전화번호 미제출율(%)")+ theme(legend.position = "bottom") + scale_color_discrete(name = "요양기관종별")
+
+lm.overall1 <- lm(NO.percent_19 ~ surgery_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="상급종합병원",])
+lm.overall2 <- lm(NO.percent_19 ~ surgery_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="종합병원",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("미제출 = %.2f + %.2f * 수술 환자 수 (p-value : %.3f)\n", summary(lm.overall1)$coef[1,1], summary(lm.overall1)$coef[2,1], summary(lm.overall1)$coef[2,4]))
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("미제출 = %.2f + %.2f * 수술 환자 수 (p-value : %.3f)\n", summary(lm.overall2)$coef[1,1], summary(lm.overall2)$coef[2,1], summary(lm.overall2)$coef[2,4]))
+
+```
+
+## (5) 허가병상수 대비 방문환자
+```{r, message=FALSE, warning=F,echo=FALSE}
+
+hospital_info17$crowded <- hospital_info17$VISIT_17 / hospital_info17$BED_17
+
+ggplot(hospital_info17, aes(x=crowded, y=NO.percent_17, color=RECU_CL_CD_17)) + geom_point() + geom_smooth(method="lm")  + 
+ggtitle("2017년(1차) 허가병상수 대비 방문환자") + xlab("허가병상수 대비 방문환자") + ylab("전화번호 미제출율(%)")+ theme(legend.position = "bottom") + scale_color_discrete(name = "요양기관종별")
+
+
+lm.overall17_1 <- lm(NO.percent_17 ~  crowded, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="상급종합병원",])
+lm.overall17_2 <- lm(NO.percent_17 ~  crowded, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="종합병원",])
+
+
+hospital_info19$crowded <- hospital_info19$VISIT_19 / hospital_info19$BED_19
+
+ggplot(hospital_info19, aes(x=crowded, y=NO.percent_19, color=CAPITAL19)) + geom_point() + geom_smooth(method="lm")  + 
+ggtitle("2019년(2차) 허가병상수 대비 방문환자") + xlab("허가병상수 대비 방문환자") + ylab("전화번호 미제출율(%)") + theme(legend.position = "bottom") + scale_color_discrete(name = "요양기관종별")
+
+lm.overall19_1 <- lm(NO.percent_19 ~  crowded, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="상급종합병원",])
+lm.overall19_2 <- lm(NO.percent_19 ~  crowded, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="종합병원",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("미제출 = %.2f + %.2f * Crowded (p-value : %.3f)\n", summary(lm.overall17_1)$coef[1,1], summary(lm.overall17_1)$coef[2,1], summary(lm.overall17_1)$coef[2,4]))
+cat(sprintf("미제출 = %.2f + %.2f * Crowded (p-value : %.3f)\n", summary(lm.overall17_2)$coef[1,1], summary(lm.overall17_2)$coef[2,1], summary(lm.overall17_2)$coef[2,4]))
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("미제출 = %.2f + %.2f * Crowded (p-value : %.3f)\n", summary(lm.overall19_1)$coef[1,1], summary(lm.overall19_1)$coef[2,1], summary(lm.overall19_1)$coef[2,4]))
+cat(sprintf("미제출 = %.2f + %.2f * Crowded (p-value : %.3f)\n", summary(lm.overall19_2)$coef[1,1], summary(lm.overall19_2)$coef[2,1], summary(lm.overall19_2)$coef[2,4]))
+
+```
+
+
+
+```{r}
+# 미제출율 분석
+table(data17$NOTE)
+Reason17 <- data17$NOTE[data17$NOTE !=""] # 12,195
+
+Reason17[grepl("사망", Reason17)]
+Reason17[grepl("보호자", Reason17)]
+Reason17[grepl("연락처", Reason17)]
+Reason17[grepl("입원", Reason17)]
+
+corp <- Corpus(VectorSource(Reason17))
+tdm <- TermDocumentMatrix(corp)
+inspect(tdm)
+
+Reason17[grepl("비동의", Reason17) | grepl("미동의", Reason17) | grepl("거부", Reason17) | grepl("개인", Reason17) | grepl("평가", Reason17) | grepl("설문", Reason17)]
+Reason17[grepl("불가능", Reason17)]
+Reason17[grepl("중증", Reason17) | grepl("중환", Reason17)]
+Reason17[grepl("예민", Reason17) | grepl("까칠", Reason17)]
+
+Reason17_2 <- gsub("[,/. ★] ", " ", Reason17)
+wordcount17 <- table(unlist(strsplit(Reason17_2, " ")))
+df_word17 <- as.data.frame(wordcount17, stringsAsFactors = FALSE)
+result_df17 <- df_word %>% filter(nchar(Freq) >= 2) %>% arrange(desc(Freq))
+result_df17
+
+Reason19 <- data19$NOTE[data19$NOTE !=""] # R1~R5 제외 1,548
+
+table(data19$NOTE)
+Reason19[grepl("낮", Reason19)]
+Reason19[grepl("전화", Reason19)]
+Reason19[grepl("010", Reason19)]
+Reason19[grepl("정신", Reason19)]
+Reason19[grepl("폭언", Reason19)]
+Reason19[grepl("수감", Reason19) | grepl("교도", Reason19) | grepl("제소", Reason19)]
+Reason19[grepl("중증", Reason19) | grepl("중환", Reason19)]
+Reason19[grepl("예민", Reason19) | grepl("까칠", Reason19)]
+
+Reason19_2 <- gsub("[,/. ★] ", " ", Reason19)
+wordcount19 <- table(unlist(strsplit(Reason19_2, " ")))
+df_word19 <- as.data.frame(wordcount19, stringsAsFactors = FALSE)
+result_df19 <- df_word %>% filter(nchar(Freq) >= 2) %>% arrange(desc(Freq))
+result_df19
+```
+
+# 3. 전반적인 만족도 평가점수의 상황별 시나리오
+## (1) 병원의 허가 병상수에 따른 만족도 
+
+ - 19년의 허가병상수와 6. 전반적 평가점수 간의 유의한 상관관계가 보고 되었다.
+ 
+```{r, echo=F, message=F}
+theme_set(theme_bw())
+
+## 허가병상수17 ~ 전반적 평가점수 17
+ggplot(hospital_info17, aes(x=BED_17, y=overall_17, color=RECU_CL_CD_17)) + geom_point() + geom_smooth(method="lm")  + 
+ggtitle("2017년(1차) 전반적인 만족도 평가 점수") + xlab("17년 허가병상수") + ylab("평가점수")+ theme(legend.position = "bottom") + scale_color_discrete(name = "요양기관종별")
+
+lm.overall17_1 <- lm(BED_17 ~  overall_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="상급종합병원",])
+lm.overall17_2 <- lm(BED_17 ~  overall_17, data=hospital_info17[hospital_info17$RECU_CL_CD_17=="종합병원",])
+
+
+## 허가병상수19 ~ 전반적 평가점수 19
+ggplot(hospital_info19, aes(x=BED_19, y=overall_19, color=RECU_CL_CD_19)) + geom_point()  + geom_smooth(method="lm")  + 
+ggtitle("2019년(1차) 전반적인 만족도 평가 점수") + xlab("19년 허가병상수") + ylab("평가점수")+ theme(legend.position = "bottom") + scale_color_discrete(name = "요양기관종별")
+
+lm.overall19_1 <- lm(BED_19 ~  overall_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="상급종합병원",])
+lm.overall19_2 <- lm(BED_19 ~  overall_19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="종합병원",])
+
+cat(sprintf(" <-- Result (17) --> \n"))
+cat(sprintf(" - 상급종합병원 \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 허가병상수 (p-value : %.3f)\n", summary(lm.overall17_1)$coef[1,1], summary(lm.overall17_1)$coef[2,1], summary(lm.overall17_1)$coef[2,4]))
+cat(sprintf(" - 종합병원 \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 허가병상수 (p-value : %.3f)\n", summary(lm.overall17_2)$coef[1,1], summary(lm.overall17_2)$coef[2,1], summary(lm.overall17_2)$coef[2,4]))
+
+cat(sprintf(" <-- Result (19) --> \n"))
+cat(sprintf(" - 상급종합병원 \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 허가병상수 (p-value : %.3f)\n", summary(lm.overall19_1)$coef[1,1], summary(lm.overall19_1)$coef[2,1], summary(lm.overall19_1)$coef[2,4]))
+cat(sprintf(" - 종합병원 \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 허가병상수 (p-value : %.3f)\n", summary(lm.overall19_2)$coef[1,1], summary(lm.overall19_2)$coef[2,1], summary(lm.overall19_2)$coef[2,4]))
+
+```
+
+## (2) 병원의 간호 등급에 따른 만족도 (19년도) 
+```{r, echo=F, message=F, warning=F}
+ggplot(hospital_info19, aes(x=NURSE4.19, y=overall_19, color=RECU_CL_CD_19)) + geom_point() + geom_smooth(method="lm")  + 
+ggtitle("2019년(2차) 6. 전반적 평가점수") + xlab("19년 4분기 간호등급") + ylab("평가점수")+ theme(legend.position = "bottom") + scale_color_discrete(name = "요양기관종별")
+
+lm.overall19_1 <- lm(overall_19 ~  NURSE4.19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="상급종합병원",])
+lm.overall19_2 <- lm(overall_19 ~  NURSE4.19, data=hospital_info19[hospital_info19$RECU_CL_CD_19=="종합병원",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 간호등급 (p-value : %.3f)\n", summary(lm.overall19_1)$coef[1,1], summary(lm.overall19_1)$coef[2,1], summary(lm.overall19_1)$coef[2,4]))
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("평가 점수 = %.2f + %.2f * 간호등급 (p-value : %.3f)\n", summary(lm.overall19_2)$coef[1,1], summary(lm.overall19_2)$coef[2,1], summary(lm.overall19_2)$coef[2,4]))
+
+```
+
+## (3) 병원의 기간 내 방문환자 수에 따른 만족도 
+
+### 3.1 입원환자
+```{r, echo=F, message=F, warning=F}
+ggplot(hospital_info17, aes(x=sqrt(VISIT_17), y=overall_17, color=CAPITAL17)) + geom_point() + geom_smooth(method="lm")  + 
+ggtitle("2017년(1차) 전반적인 만족도 평가 점수") + xlab("조사 기간 동안의 입원 환자 수") + ylab("전화번호 미제출율(%)") + scale_color_discrete(name = "지역")+ theme(legend.position = "bottom") 
+
+lm.overall17_1 <- lm(overall_17 ~ sqrt(VISIT_17), data=hospital_info17[hospital_info17$CAPITAL17=="수도권",])
+lm.overall17_2 <- lm(overall_17 ~ sqrt(VISIT_17), data=hospital_info17[hospital_info17$CAPITAL17=="비수도권",])
+
+ggplot(hospital_info19, aes(x=sqrt(VISIT_19), y=overall_19, color=CAPITAL19)) + geom_point() + geom_smooth(method="lm")  + 
+ggtitle("2019년(2차) 전반적인 만족도 평가 점수") + xlab("조사 기간 동안의 입원 환자 수") + ylab("평가점수") + scale_color_discrete(name = "지역")+ theme(legend.position = "bottom") 
+
+lm.overall19_1 <- lm(overall_19 ~ sqrt(VISIT_19), data=hospital_info19[hospital_info19$CAPITAL19=="수도권",])
+lm.overall19_2 <- lm(overall_19 ~ sqrt(VISIT_19), data=hospital_info19[hospital_info19$CAPITAL19=="비수도권",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("평가점수 = %.2f + %.2f * 입원 환자 수 (p-value : %.3f)\n", summary(lm.overall17_1)$coef[1,1], summary(lm.overall17_1)$coef[2,1], summary(lm.overall17_1)$coef[2,4]))
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("평가점수 = %.2f + %.2f * 입원 환자 수 (p-value : %.3f)\n", summary(lm.overall17_2)$coef[1,1], summary(lm.overall17_2)$coef[2,1], summary(lm.overall17_2)$coef[2,4]))
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("평가점수 = %.2f + %.2f * 입원 환자 수 (p-value : %.3f)\n", summary(lm.overall19_1)$coef[1,1], summary(lm.overall19_1)$coef[2,1], summary(lm.overall19_1)$coef[2,4]))
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("평가점수 = %.2f + %.2f * 입원 환자 수 (p-value : %.3f)\n", summary(lm.overall19_2)$coef[1,1], summary(lm.overall19_2)$coef[2,1], summary(lm.overall19_2)$coef[2,4]))
+
+
+```
+
+### 3.2 수술환자
+
+```{r, echo=F, message=F, warning=F}
+ggplot(hospital_info17, aes(x=sqrt(surgery_17), y=overall_17, color=CAPITAL17)) + geom_point() + geom_smooth(method="lm")  + 
+ggtitle("2017년(1차) 전반적인 만족도 평가 점수") + xlab("조사 기간 동안의 수술 환자 수") + ylab("전화번호 미제출율(%)") + scale_color_discrete(name = "지역")+ theme(legend.position = "bottom") 
+
+lm.overall17_1 <- lm(overall_17 ~ sqrt(surgery_17), data=hospital_info17[hospital_info17$CAPITAL17=="수도권",])
+lm.overall17_2 <- lm(overall_17 ~ sqrt(surgery_17), data=hospital_info17[hospital_info17$CAPITAL17=="비수도권",])
+
+ggplot(hospital_info19, aes(x=sqrt(surgery_19), y=overall_19, color=CAPITAL19)) + geom_point() + geom_smooth(method="lm")  + 
+ggtitle("2019년(2차) 전반적인 만족도 평가 점수") + xlab("조사 기간 동안의 수술 환자 수") + ylab("평가점수") + scale_color_discrete(name = "지역")+ theme(legend.position = "bottom") 
+
+lm.overall19_1 <- lm(overall_19 ~ sqrt(surgery_19), data=hospital_info19[hospital_info19$CAPITAL19=="수도권",])
+lm.overall19_2 <- lm(overall_19 ~ sqrt(surgery_19), data=hospital_info19[hospital_info19$CAPITAL19=="비수도권",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("평가점수 = %.2f + %.2f * 수술 환자 수 (p-value : %.3f)\n", summary(lm.overall17_1)$coef[1,1], summary(lm.overall17_1)$coef[2,1], summary(lm.overall17_1)$coef[2,4]))
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("평가점수 = %.2f + %.2f * 수술 환자 수 (p-value : %.3f)\n", summary(lm.overall17_2)$coef[1,1], summary(lm.overall17_2)$coef[2,1], summary(lm.overall17_2)$coef[2,4]))
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("평가점수 = %.2f + %.2f * 수술 환자 수 (p-value : %.3f)\n", summary(lm.overall19_1)$coef[1,1], summary(lm.overall19_1)$coef[2,1], summary(lm.overall19_1)$coef[2,4]))
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("평가점수 = %.2f + %.2f * 수술 환자 수 (p-value : %.3f)\n", summary(lm.overall19_2)$coef[1,1], summary(lm.overall19_2)$coef[2,1], summary(lm.overall19_2)$coef[2,4]))
+```
+
+## (4) 허가병상수 대비 방문환자에 따른 만족도 
+```{r, echo=F, message=F, warning=F}
+ggplot(hospital_info17, aes(x=crowded, y=overall_17, color=CAPITAL17)) + geom_point() + geom_smooth(method="lm")  + 
+ggtitle("2017년(1차) 전반적인 만족도 평가 점수") + xlab("조사 기간 동안의 Crowded") + ylab("평가점수") + scale_color_discrete(name = "지역")+ theme(legend.position = "bottom") 
+
+lm.overall17_1 <- lm(overall_17 ~ crowded, data=hospital_info17[hospital_info17$CAPITAL17=="수도권",])
+lm.overall17_2 <- lm(overall_17 ~ crowded, data=hospital_info17[hospital_info17$CAPITAL17=="비수도권",])
+
+ggplot(hospital_info19, aes(x=crowded, y=overall_19, color=CAPITAL19)) + geom_point() + geom_smooth(method="lm")  + 
+ggtitle("2019년(2차) 전반적인 만족도 평가 점수" ) + xlab("조사 기간 동안의 Crowded") + ylab("평가점수")  + scale_color_discrete(name = "지역")+ theme(legend.position = "bottom") 
+
+lm.overall19_1 <- lm(overall_19 ~ crowded, data=hospital_info19[hospital_info19$CAPITAL19=="수도권",])
+lm.overall19_2 <- lm(overall_19 ~ crowded, data=hospital_info19[hospital_info19$CAPITAL19=="비수도권",])
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("평가점수 = %.2f + %.2f * Crowded (p-value : %.3f)\n", summary(lm.overall17_1)$coef[1,1], summary(lm.overall17_1)$coef[2,1], summary(lm.overall17_1)$coef[2,4]))
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("평가점수 = %.2f + %.2f * Crowded (p-value : %.3f)\n", summary(lm.overall17_2)$coef[1,1], summary(lm.overall17_2)$coef[2,1], summary(lm.overall17_2)$coef[2,4]))
+
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("평가점수 = %.2f + %.2f * Crowded (p-value : %.3f)\n", summary(lm.overall19_1)$coef[1,1], summary(lm.overall19_1)$coef[2,1], summary(lm.overall19_1)$coef[2,4]))
+cat(sprintf(" <-- Result --> \n"))
+cat(sprintf("평가점수 = %.2f + %.2f * Crowded (p-value : %.3f)\n", summary(lm.overall19_2)$coef[1,1], summary(lm.overall19_2)$coef[2,1], summary(lm.overall19_2)$coef[2,4]))
+```
